@@ -1,5 +1,5 @@
 {
-  "name": "hackathon-behaviour",
+  "name": "greebo",
   "version": "1.0.0",
   "description": "Behaviour hacking with Root",
   "main": "index.js",
@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RootBank/hackathon-behaviour.git"
+    "url": "git+https://github.com/linsen/greebo.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/RootBank/hackathon-behaviour/issues"
+    "url": "https://github.com/linsen/greebo/issues"
   },
-  "homepage": "https://github.com/RootBank/hackathon-behaviour#readme",
+  "homepage": "https://github.com/linsen/greebo#readme",
   "dependencies": {
     "body-parser": "^1.17.2",
     "diskdb": "^0.1.17",
@@ -24,6 +24,8 @@
     "express": "^4.15.3",
     "hogan-express": "^0.5.2",
     "pusher": "^1.5.1",
-    "request": "^2.81.0"
+    "request": "^2.81.0",
+    "scrape-it": "^3.3.2",
+    "cheerio": "^1.0.0-rc.2"
   }
 }

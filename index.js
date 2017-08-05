@@ -5,12 +5,16 @@ var express = require('express');
 var app = express();
 var hogan = require('hogan-express');
 var path = require('path');
+var request = require('request');
+const cheerio = require('cheerio');
+const scrapeIt = require("scrape-it");
 
 var db = require('diskdb');
-db = db.connect('./database', ['users', 'sponsor_payments', 'events']);
+db = db.connect('./database', ['users', 'sponsor_payments', 'dates']);
 
 var users = require('./helpers/users');
 var { getRandValue } = require('./helpers/money-methods');
+var { getDateFromString } = require('./helpers/date-methods');
 
 var Pusher = require('pusher');
 var pusher = new Pusher({
@@ -107,44 +111,42 @@ app.get('/callback', function(req, res) {
 app.post('/log-date', function(req, res) {
   var data = req.body;
 
-  // Validate value is non-negative integer
-  var value = parseInt(data.value);
-  if (data.value !== value.toString() || value < 0) {
+  var dateString = data.date;
+  var date = getDateFromString(dateString);
+  var currentYear = new Date().getFullYear();
+  if ((date.getFullYear() <  currentYear - 1) || (date > new Date())) {
+    logAndNotify('Invalide date: ' + dateString);
     return res.status(400).json({ error: 'invalid_value' });
   }
 
-  // Save event in database
-  var event = {
-    value,
-    time: data.time,
-    user_id: data.user_id,
-  };
-  db.events.save(event);
+  // Check that date isn't already in the database
+  var existingDates = db.dates.find({ user_id: data.user_id, date: dateString });
 
-  logAndNotify('Event: ' + value);
+  if (existingDates.length == 0) {
+    // Save event in database
+    var gymDay = {
+      date: dateString,
+      time: data.time,
+      user_id: data.user_id,
+    };
+    db.dates.save(gymDay);
 
-  // Get average of user's 10 most recent speeds
-  var user = db.users.findOne({ user_id: event.user_id });
-  var userData = db.events.find({ user_id: event.user_id });
-  var recentData = userData.slice(-10);
-  var averageSpeed = recentData.reduce(function(ave, current) {
-    return ave + parseInt(current.value) / recentData.length;
-  }, 0);
+    logAndNotify('Saved date: ' + dateString);
 
-  // If at least 10 events AND average speed less than max AND
-  // user has not been added to sponsor:
-  //   add user to sponsor
-  if (recentData.length >= 10 && averageSpeed <= MAX_SPEED && !user.added_to_sponsor) {
-    db.users.update({ user_id: event.user_id }, { added_to_sponsor: true });
-    users.addUserToConfigVariables(data.user_id, process.env.SPONSOR_ID, function(err, result) {
+    // TODO: Update user's available credit and store in env variables
+    var userData = db.dates.find({ user_id: data.user_id });
+    var credit = userData.length;
+
+    users.updateUserCreditInConfigVariables(data.user_id, credit, process.env.SPONSOR_ID, function(err, result) {
       if (err) {
-        console.error('ERROR ADDING USER TO SPONSOR:', err);
-        user.added_to_sponsor = false;
-        db.users.update({ user_id: event.user_id }, { added_to_sponsor: false });
+        console.error('ERROR UPDATING USER CREDIT ON SPONSOR:', err);
       } else {
-        logAndNotify('User added to sponsor');
+        logAndNotify('User credit updated on sponsor');
       }
-    })
+    });
+
+  } else {
+    logAndNotify('Date already present: ' + dateString);
   }
 
   res.send();
@@ -159,6 +161,7 @@ app.post('/log-date', function(req, res) {
 // or an error occurred in the sponsorPayment function.
 app.post('/webhooks/sponsors', function(req, res) {
   var data = req.body;
+
   var userId = data.user_id;
   var sponsorId = data.sponsor_id;
   var sponsorAmount = data.sponsor_amount;
@@ -167,6 +170,7 @@ app.post('/webhooks/sponsors', function(req, res) {
   
   if (error) {
     console.error('SPONSOR ERROR: ' + JSON.stringify(error));
+
   } else {
     var transaction = {
       user_id: userId,
@@ -175,18 +179,17 @@ app.post('/webhooks/sponsors', function(req, res) {
       transaction_id: transactionId,
     };
 
-    db.sponsor_payments.save(transaction);
+    // Check that sponsor payment isn't already in the database
+    var existingPayments = db.sponsor_payments.find({ transaction_id: transactionId });
+    if (existingPayments.length == 0) {
+      db.sponsor_payments.save(transaction);
 
-    users.removeUserFromConfigVariables(userId, sponsorId, function(err, result) {
-      if (err) {
-        console.error('Error removing user from config variables:', err);
-      } else {
-        user = db.users.findOne({ user_id: userId });
-        user.added_to_sponsor = false;
-        db.users.update({ user_id: userId }, user);
-        logAndNotify('User removed from sponsor')
-      }
-    });
+      logAndNotify('User sponsored: ' + getRandValue(sponsorAmount));
+    } else {
+
+      logAndNotify('Duplicate webhook ignored – user sponsored: ' + getRandValue(sponsorAmount));
+    }
+
   }
 
   res.send();
@@ -202,17 +205,91 @@ app.get('/users', function(req, res) {
   res.json(db.users.find());
 });
 
-// Return the average speed for the specified user.
-app.get('/users/:user_id/average', function(req, res) {
+// Return the available credit for the specified user.
+app.get('/users/:user_id/credit', function(req, res) {
   var userId = req.params.user_id;
-  var userData = db.events.find({ user_id: userId });
+  var userData = db.dates.find({ user_id: userId });
 
-  var averageSpeed = userData.reduce(function(ave, current) {
-    return ave + parseInt(current.value) / userData.length;
+  var credit = userData.length;
+
+  var payments = db.sponsor_payments.find({ user_id: userId });
+  var spend = payments.reduce(function(sum, current) {
+    return sum + parseInt(current.sponsor_amount);
   }, 0);
 
-  res.json({ average_speed: averageSpeed.toFixed(2) });
+  res.json({ credit: credit, spend: getRandValue(spend) });
 });
+
+
+var DISCOVERY_API_URL = 'https://www.discovery.co.za/portal/';
+
+// Return the available credit for the specified user.
+app.post('/users/:user_id/fetch_gym_data', function(req, res) {
+  var userId = req.params.user_id;
+
+  var data = req.body;
+  var username = data.username;
+  var password = data.password;
+
+
+  // Update config variables
+  var j = request.jar();
+  request.debug = true;
+
+  // var uri = DISCOVERY_API_URL + 'individual/login';
+  // var getOptions = {
+  //   uri,
+  //   jar: j
+  // };
+  // console.log(getOptions);
+  // request.get(getOptions, function(err, response, body) {
+  //   if (err) {
+  //     typeof callback === 'function' && callback(err);
+  //   } else {
+  //     console.log("Get successful");
+  //     // console.log(body.substr(0, 250));
+
+      uri = DISCOVERY_API_URL + 'login.do';
+      var requestHeaders = {
+      };
+      var postOptions = {
+        uri,
+        j_username: username,
+        j_password: password,
+        dest: '/individual/gym-tracker',
+        headers: requestHeaders,
+        jar: j
+      };
+      console.log(postOptions);
+
+      request.post(postOptions, function(err, response, body) {
+        if (err) {
+          typeof callback === 'function' && callback(err);
+        } else {
+          console.log("Post successful");
+
+          console.log(body.substr(0, 400));
+
+          var $ = cheerio.load(body);
+          var pageData = scrapeIt.scrapeHTML($, {
+            output: 'title'
+            // output: {
+            //   selector: "title"
+            // , attr: "class"
+            // }
+          });
+          console.log(pageData);
+
+        }
+      });
+
+  //   }
+  // });
+
+
+  res.json({  });
+});
+
 
 app.listen(3000, function () {
   console.log('Example app listening on port 3000!')

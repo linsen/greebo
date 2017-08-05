@@ -4,12 +4,12 @@ require('dotenv').config();
 
 var request = require('request');
 
-var ROOT_API_URL = 'http://api.root.co.za/v1';
+var ROOT_API_URL = 'https://api.root.co.za/v1';
 
-// This function adds a user to a sponsor item's config variable `users`
-// The config variable `users` is a comma separated string of user ids
-exports.addUserToConfigVariables = (userId, sponsorId, callback) => {
-  var uri = ROOT_API_URL + '/sponsors/' + sponsorId + '/config-variables';
+// This function updates a user in a sponsor item's config variable `users`
+// The config variable `users` is a JSON string of user ID's and credit values
+exports.updateUserCreditInConfigVariables = (userId, credit, sponsorId, callback) => {
+  var uri = ROOT_API_URL + '/sponsors/' + sponsorId + '/root-code';
   var auth = {
     username: process.env.CLIENT_ID,
     password: process.env.CLIENT_SECRET,
@@ -21,19 +21,23 @@ exports.addUserToConfigVariables = (userId, sponsorId, callback) => {
     if (err) {
       console.error('Error getting config variables:', err);
       typeof callback === 'function' && callback(err);
+
     } else {
-      var users = body.users || '';
+      var usersString = JSON.parse(body).config_variables.users || '{}';
+      var users = JSON.parse(usersString);
 
-      // Add userId to users
-      if (!users.includes(userId)) {
-        users = users.concat(',' + userId);
-      }
+      // Update credit
+      users[userId] = credit;
 
+      // Stringify back to JSON
+      usersString = JSON.stringify(users);
+
+      uri = ROOT_API_URL + '/sponsors/' + sponsorId + '/config-variables';
       var postOptions = {
         uri,
         auth,
         json: {
-          config_variables: { users },
+          config_variables: { users: usersString },
         },
       };
 
@@ -42,48 +46,7 @@ exports.addUserToConfigVariables = (userId, sponsorId, callback) => {
         if (err) {
           typeof callback === 'function' && callback(err);
         } else {
-          typeof callback === 'function' && callback(null, 'User added.');
-        }
-      });
-    }
-  });
-};
-
-// This function removes a user from a sponsor item's config variable `users`
-exports.removeUserFromConfigVariables = (userId, sponsorId, callback) => {
-  var uri = ROOT_API_URL + '/sponsors/' + sponsorId + '/config-variables';
-  var auth = {
-    user: process.env.CLIENT_ID,
-    pass: process.env.CLIENT_SECRET,
-  };
-
-  var getOptions = { uri, auth };
-
-  // First, fetch current config variables
-  request.get(getOptions, function(err, response, body) {
-    if (err) {
-      callback(null, err);
-    } else {
-      var users = body.users || '';
-
-      // Remove userId from users
-      users = users.replace(userId + ',', '');
-
-      // Update config variables with new users
-      var postOptions = {
-        uri,
-        auth,
-        json: {
-          config_variables: { users },
-        },
-      };
-
-      // Update config variables
-      request.post(postOptions, function(err, response, body) {
-        if (err) {
-          typeof callback === 'function' && callback(err);
-        } else {
-          typeof callback === 'function' && callback(null, 'User removed.');
+          typeof callback === 'function' && callback(null, 'User credit updated.');
         }
       });
     }

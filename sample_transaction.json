@@ -1,0 +1,20 @@
+{
+  "transaction_id": "",
+  "user_id": "",
+  "card_id": "",
+  "amount": -1000,
+  "method": "card",
+  "type": "deduct",
+  "description": "LABIA THEATRE CAPE TOWN ZAF",
+  "created_at": "2017-08-05T10:17:35.264Z",
+  "tag_ids": [],
+  "category_id": null,
+  "contact_id": null,
+  "merchant": {
+    "category": "Civic, Social, Fraternal Associations",
+    "category_code": "8641",
+    "name": "LABIA THEATRE",
+    "location": "CAPE TOWN",
+    "country": "ZAF"
+  }
+}

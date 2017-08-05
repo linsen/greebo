@@ -70,6 +70,13 @@ body {
   width: 100%;
 }
 
+.iphone .update-gym-data {
+  padding-top: 50px;
+}
+.iphone .update-gym-data input {
+  margin-bottom: 10px;
+}
+
 /* Handle signed in state */
 .iphone .content-signed-out {
   display: none;
