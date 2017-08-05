@@ -133,7 +133,7 @@ app.post('/log-date', function(req, res) {
 
     logAndNotify('Saved date: ' + dateString);
 
-    // TODO: Update user's available credit and store in env variables
+    // Update user's available credit and store in env variables
     var userData = db.dates.find({ user_id: data.user_id });
     var credit = userData.length;
 
@@ -221,70 +221,74 @@ app.get('/users/:user_id/credit', function(req, res) {
 });
 
 
-var DISCOVERY_API_URL = 'https://www.discovery.co.za/portal/';
-
 // Return the available credit for the specified user.
 app.post('/users/:user_id/fetch_gym_data', function(req, res) {
   var userId = req.params.user_id;
 
-  var data = req.body;
-  var username = data.username;
-  var password = data.password;
-
-
   // Update config variables
-  var j = request.jar();
-  request.debug = true;
+  // https://www.discovery.co.za/vitality-online/gymTrackerMonthlyBreakdown.do
+  var uri = 'http://localhost:3000/gym_data.json';
+  var getOptions = {
+    uri
+  };
+  console.log(getOptions);
+  request.get(getOptions, function(err, response, body) {
+    if (err) {
+      typeof callback === 'function' && callback(err);
+    } else {
+      console.log('Get successful');
 
-  // var uri = DISCOVERY_API_URL + 'individual/login';
-  // var getOptions = {
-  //   uri,
-  //   jar: j
-  // };
-  // console.log(getOptions);
-  // request.get(getOptions, function(err, response, body) {
-  //   if (err) {
-  //     typeof callback === 'function' && callback(err);
-  //   } else {
-  //     console.log("Get successful");
-  //     // console.log(body.substr(0, 250));
+      var pageData = JSON.parse(body);
+      var dates = [];
 
-      uri = DISCOVERY_API_URL + 'login.do';
-      var requestHeaders = {
-      };
-      var postOptions = {
-        uri,
-        j_username: username,
-        j_password: password,
-        dest: '/individual/gym-tracker',
-        headers: requestHeaders,
-        jar: j
-      };
-      console.log(postOptions);
+      var curMonth = new Date().getMonth();
+      var curYear = new Date().getFullYear();
 
-      request.post(postOptions, function(err, response, body) {
+      for (var i = 0; i < pageData.monthlyBreakdownDto.length; i++) {
+        var monthData = pageData.monthlyBreakdownDto[i];
+        var month = curMonth - i;
+        var year = curYear;
+        if (month < 0) {
+          year -= 1;
+          month += 12;
+        }
+
+        for (var j = 0; j < monthData.gymEventDtos.length; j++) {
+          var event = monthData.gymEventDtos[j];
+          var date = event.eventDate.date;
+
+          if (month < 10) month = '0' + month;
+          if (date < 10) date = '0' + date;
+
+          dateString = year + '-' + month + '-' + date;
+          dates.push(dateString);
+
+          var existingDates = db.dates.find({ user_id: userId, date: dateString });
+          if (existingDates.length == 0) {
+            // Save event in database
+            var gymDay = {
+              date: dateString,
+              user_id: userId,
+            };
+            db.dates.save(gymDay);
+          }
+        }
+      }
+
+      // Update user's available credit and store in env variables
+      var userData = db.dates.find({ user_id: userId });
+      var credit = userData.length;
+
+      users.updateUserCreditInConfigVariables(userId, credit, process.env.SPONSOR_ID, function(err, result) {
         if (err) {
-          typeof callback === 'function' && callback(err);
+          console.error('ERROR UPDATING USER CREDIT ON SPONSOR:', err);
         } else {
-          console.log("Post successful");
-
-          console.log(body.substr(0, 400));
-
-          var $ = cheerio.load(body);
-          var pageData = scrapeIt.scrapeHTML($, {
-            output: 'title'
-            // output: {
-            //   selector: "title"
-            // , attr: "class"
-            // }
-          });
-          console.log(pageData);
-
+          logAndNotify('User credit updated on sponsor');
         }
       });
 
-  //   }
-  // });
+    }
+  });
 
 
   res.json({  });
