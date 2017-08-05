@@ -1,0 +1,89 @@
+body {
+  background-color: #F0F4F7;
+}
+
+.navbar {
+  background-color: #2ABB9B;
+  border-color: #25a287;
+}
+
+.navbar-brand>img {
+  max-height: 34px;
+  margin-top: -7px;
+  border-radius: 5px;
+}
+.navbar-text {
+  color: white !important;
+  margin-left: 0;
+}
+
+.alertify-logs {
+  z-index: 999999;
+}
+
+.iphone {
+  height: 700px;
+  width: 340px;
+  display: inline-block;
+  background-image: url('./iphone.png');
+  background-size: contain;
+  padding: 100px 19px 95px 25px;
+}
+
+.iphone .screen {
+  border-radius: 3px;
+  height: 100%;
+  padding: 20px;
+  background-color: white;
+  color: #333;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.iphone .screen p {
+  margin-bottom: 30px;
+}
+
+.iphone .screen img {
+  width: 100px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+}
+
+.iphone .screen .navigation-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  background-color: #2ABB9B;
+  border-color: #25a287;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+}
+.iphone .screen .content {
+  width: 100%;
+}
+
+/* Handle signed in state */
+.iphone .content-signed-out {
+  display: none;
+}
+.iphone.signed-out .screen {
+  background-color: #2ABB9B;
+  color: white;
+}
+.iphone.signed-out .screen .navigation-bar {
+  display: none;
+}
+.iphone.signed-out .content-signed-in {
+  display: none;
+}
+.iphone.signed-out .content-signed-out {
+  display: block;
+}
